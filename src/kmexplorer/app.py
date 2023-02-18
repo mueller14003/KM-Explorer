@@ -162,7 +162,6 @@ class KMExplorer(toga.App):
         play_pause = toga.Command(
             self.PlayPauseVLC,
             label="Play/Pause",
-            shortcut=toga.Key.MOD_1 + toga.Key.P,
             group=vlc_group,
             icon=toga.Icon.TOGA_ICON,
             section=0
@@ -171,7 +170,6 @@ class KMExplorer(toga.App):
         stop = toga.Command(
             self.StopVLC,
             label="Stop VLC",
-            shortcut=toga.Key.MOD_1 + toga.Key.X,
             group=vlc_group,
             section=0
         )
@@ -179,7 +177,6 @@ class KMExplorer(toga.App):
         fullscreen = toga.Command(
             self.ToggleFullscreenVLC,
             label="Toggle Fullscreen",
-            shortcut=toga.Key.MOD_1 + toga.Key.F,
             group=vlc_group,
             section=1
         )
