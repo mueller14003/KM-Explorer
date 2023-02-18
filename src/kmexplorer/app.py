@@ -3,7 +3,7 @@ Play media from local, network, and Google Drive folders
 """
 import os
 
-TESTING = True
+TESTING = False
 START_PATH = ['app','src'][TESTING]
 
 CWD = os.getcwd()
