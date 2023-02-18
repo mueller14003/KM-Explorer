@@ -3,7 +3,7 @@ Play media from local, network, and Google Drive folders
 """
 import os
 
-TESTING = False
+TESTING = True
 START_PATH = ['app','src'][TESTING]
 
 CWD = os.getcwd()
@@ -434,6 +434,8 @@ class KMExplorer(toga.App):
             on_select=self.SetAudioTrack
         )
         
+        self.AdjustDropDownWidth(self.audio_tracks)
+        
         if audio_track:
             self.audio_tracks.value = audio_track
         
@@ -463,6 +465,8 @@ class KMExplorer(toga.App):
             items=subtitles,
             on_select=self.SetSubtitle
         )
+        
+        self.AdjustDropDownWidth(self.subtitles)
         
         if subtitle:
             self.subtitles.value = subtitle
@@ -799,6 +803,17 @@ class KMExplorer(toga.App):
             self.subtitles.value = sorted_subs[1]
         
         #endregion
+                
+    def AdjustDropDownWidth(self, combo_box):
+        if combo_box.items:
+            width = combo_box._impl.native.DropDownWidth
+            graphics = combo_box._impl.native.CreateGraphics()
+            font = combo_box._impl.native.Font
+            
+            max_width = round(max(map(lambda item: graphics.MeasureString(item, font).Width, combo_box.items)))
+            width = max_width if max_width > width else width
+            
+            combo_box._impl.native.DropDownWidth = width
         
     def PlayWithVLC(self, input_str, filename):
         print(f"DEBUG: Playing {input_str} With VLC")
@@ -831,10 +846,12 @@ class KMExplorer(toga.App):
                 
                 self.SetupAudioTracks()
                 self.SetAudioTrackItems()
+                self.AdjustDropDownWidth(self.audio_tracks)
                 
                 self.SetupSubtitles()
                 self.SetSubtitleItems()
                 self.SetSubtitlesInitial()
+                self.AdjustDropDownWidth(self.subtitles)
                 
                 self.play_button.text=PAUSE
 
