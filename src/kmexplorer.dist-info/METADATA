@@ -1,0 +1,10 @@
+Metadata-Version: 2.1
+Briefcase-Version: 0.3.5
+Name: kmexplorer
+Formal-Name: KM Explorer
+App-ID: com.kylemueller.kmexplorer.kmexplorer
+Version: 1.2.1
+Home-page: https://github.com/mueller14003
+Author: Kyle Mueller
+Author-email: kyle.mueller.ghs@gmail.com
+Summary: Play media from local, network, and Google Drive folders

@@ -1,0 +1,91 @@
+[tool.briefcase]
+project_name = "KM Explorer"
+bundle = "com.kylemueller.kmexplorer"
+version = "1.2.1"
+url = "https://github.com/mueller14003"
+license = "BSD license"
+author = 'Kyle Mueller'
+author_email = "kyle.mueller.ghs@gmail.com"
+
+[tool.briefcase.app.kmexplorer]
+formal_name = "KM Explorer"
+description = "Play media from local, network, and Google Drive folders"
+icon = "src/kmexplorer/resources/kmexplorer"
+sources = ['src/kmexplorer']
+requires = [
+    'python-vlc>=3.0.18121',
+    'pydrive2>=1.15.0',
+    'google-api-python-client>=1.12.5',
+    'oauth2client>=4.0.0',
+    'pyOpenSSL>=19.1.0',
+    'PyYAML>=3.0',
+    'httplib2<1dev,>=0.15.0',
+    'uritemplate<5,>=3.0.1',
+    'google-auth<3.0.0dev,>=1.19.0',
+    'google-api-core!=2.0.*,!=2.1.*,!=2.2.*,!=2.3.0,<3.0.0dev,>=1.31.5',
+    'google-auth-httplib2>=0.1.0',
+    'pyasn1-modules>=0.0.5',
+    'rsa>=3.1.4',
+    'six>=1.6.1',
+    'pyasn1>=0.1.7',
+    'cryptography<40,>=38.0.0',
+    'cffi>=1.12',
+    'googleapis-common-protos<2.0dev,>=1.56.2',
+    'requests<3.0.0dev,>=2.18.0',
+    'protobuf!=3.20.0,!=3.20.1,!=4.21.0,!=4.21.1,!=4.21.2,!=4.21.3,!=4.21.4,!=4.21.5,<5.0.0dev,>=3.19.5',
+    'cachetools<6.0,>=2.0.0',
+    'pyparsing!=3.0.0,!=3.0.1,!=3.0.2,!=3.0.3,<4,>=2.4.2',
+    'pycparser',
+    'urllib3<1.27,>=1.21.1',
+    'charset-normalizer~=2.0.0',
+    'certifi>=2017.4.17',
+    'idna<4,>=2.5'
+]
+
+
+[tool.briefcase.app.kmexplorer.macOS]
+requires = [
+    'toga-cocoa>=0.3.0.dev34',
+    'std-nslog~=1.0.0'
+]
+
+[tool.briefcase.app.kmexplorer.linux]
+requires = [
+    'toga-gtk>=0.3.0.dev34',
+]
+
+[tool.briefcase.app.kmexplorer.linux.appimage]
+system_requires = [
+    'gir1.2-webkit-3.0',
+    'libcairo2-dev',
+    'libgirepository1.0-dev',
+    'libgtk-3-dev',
+    'libpango1.0-dev',
+    'librsvg2-dev',
+    'libwebkitgtk-3.0-0',
+]
+linuxdeploy_plugins = [
+    'DEPLOY_GTK_VERSION=3 gtk',
+]
+
+[tool.briefcase.app.kmexplorer.linux.flatpak]
+flatpak_runtime = 'org.gnome.Platform'
+flatpak_runtime_version = '42'
+flatpak_sdk = 'org.gnome.Sdk'
+
+[tool.briefcase.app.kmexplorer.windows]
+requires = [
+    'toga-winforms>=0.3.0.dev34',
+]
+
+# Mobile deployments
+[tool.briefcase.app.kmexplorer.iOS]
+requires = [
+    'toga-iOS>=0.3.0.dev34',
+    'std-nslog~=1.0.0'
+]
+
+[tool.briefcase.app.kmexplorer.android]
+requires = [
+    'toga-android>=0.3.0.dev34'
+]
