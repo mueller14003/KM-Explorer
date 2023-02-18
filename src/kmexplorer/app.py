@@ -21,8 +21,9 @@ from toga.style import Pack
 from toga.style.pack import COLUMN, ROW, CENTER, RIGHT, LEFT, HIDDEN, VISIBLE, TOP, BOTTOM
 from toga_winforms.libs.winforms import WinForms
 
-RESOURCES = f"{START_PATH}\\kmexplorer\\resources"
+#region Setup
 
+RESOURCES = f"{START_PATH}\\kmexplorer\\resources"
 REPO_PATH = f"{RESOURCES}\\repo.txt"
 
 CLIENT_SECRETS_PATH = f"{RESOURCES}\\client_secrets.json"
@@ -59,12 +60,12 @@ _DOWN = WinForms.Keys.Down
 _LEFT = WinForms.Keys.Left
 _RIGHT = WinForms.Keys.Right
 
-ARROW_KEYS = [
+ARROW_KEYS = {
     _UP,
     _DOWN,
     _LEFT,
     _RIGHT
-]
+}
 
 VLC_SUPPORTED_FILE_EXTENSIONS = {
     '.ASX',
@@ -131,6 +132,8 @@ class FolderType(Enum):
     LOCAL_OR_NETWORK = 1
     GOOGLE_DRIVE = 2
     FOLDER_REPO = 3
+
+#endregion
 
 #region Startup
 
@@ -684,7 +687,8 @@ class KMExplorer(toga.App):
                     self.audio_tracks.items,
                     self.subtitles.items,
                     self.audio_tracks.value,
-                    self.subtitles.value
+                    self.subtitles.value,
+                    self.volume_slider.value
                 )
                 self.vlc_box.add(self.control_box)
     
@@ -700,7 +704,8 @@ class KMExplorer(toga.App):
                         self.audio_tracks.items,
                         self.subtitles.items,
                         self.audio_tracks.value,
-                        self.subtitles.value
+                        self.subtitles.value,
+                        self.volume_slider.value
                     )
                     self.vlc_box.add(self.control_box)
             else:
