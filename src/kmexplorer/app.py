@@ -491,7 +491,7 @@ class KMExplorer(toga.App):
         )
         
         self.volume_slider = toga.Slider(
-            value=volume,
+            value=int(volume),
             range=(0,100),
             tick_count=101,
             style=Pack(
