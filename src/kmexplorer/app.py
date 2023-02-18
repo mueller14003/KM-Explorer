@@ -23,6 +23,9 @@ GoogleAuth.DEFAULT_SETTINGS['client_config_file'] = CLIENT_SECRETS_PATH
 
 CREDENTIALS_PATH = f"{RESOURCES}\\user_creds.json"
 
+with open(f"{RESOURCES}\\API_KEY.txt", "r", encoding='utf-8') as f:
+    API_KEY = f.readline()
+
 FOLDER_REPO = "Folder Repo"
 VLC_PLAYER =  "VLC Player"
 GET_FOLDER = "Enter Folder Name"
@@ -872,7 +875,7 @@ class KMExplorer(toga.App):
         self.PlayWithVLC(url)
     
     def GetGoogleDriveURL(self, file_id):
-        return f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media&key=AIzaSyAkP3QKVLA4Vp5OwpHxsMRbzujnqmj7JA8"
+        return f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media&key={API_KEY}"
       
     #endregion
     
