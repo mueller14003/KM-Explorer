@@ -66,6 +66,6 @@ linux/
 django/
 
 # Secrets
-src/kmexplorer/resources/client_secrets.json
-src/kmexplorer/resources/user_creds.json
-src/kmexplorer/resources/repo.txt
+client_secrets.json
+user_creds.json
+repo.txt
