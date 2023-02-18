@@ -12,6 +12,7 @@ os.environ['PYTHON_VLC_LIB_PATH'] = f"{CWD}\\{START_PATH}\\kmexplorer\\vlc-3.0.1
 os.environ['PYTHON_VLC_MODULE_PATH'] = f"{CWD}\\{START_PATH}\\kmexplorer\\vlc-3.0.18"
 
 import vlc
+import math
 from time import sleep
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
@@ -480,6 +481,8 @@ class KMExplorer(toga.App):
         
             #region Volume Slider
         
+        volume = round(volume)
+        
         volume_slider_box = toga.Box(
             style=Pack(
                 direction=COLUMN,
@@ -491,7 +494,7 @@ class KMExplorer(toga.App):
         )
         
         self.volume_slider = toga.Slider(
-            value=round(volume),
+            value=volume,
             range=(0,100),
             tick_count=101,
             style=Pack(
@@ -502,7 +505,7 @@ class KMExplorer(toga.App):
         )
         
         self.volume_slider_label = toga.Label(
-            text=f"Volume: {round(volume)}%",
+            text=f"Volume: {volume}%{' '*self.GetVolumeSpace(volume)}",
             style=Pack(padding_bottom=3)
         )
         
@@ -625,24 +628,32 @@ class KMExplorer(toga.App):
             
         #region VLC Player Functions
         
+    def GetVolumeSpace(self, volume):
+        if volume > 0:
+            return int(4 - (int(math.log10(volume))))
+        return 4
+        
     def SetVolume(self, widget):
-        volume = int(widget.value)
-        self.volume_slider_label.text = f"Volume: {volume}%"
+        volume = round(widget.value)
+        print(f"DEBUG: SetVolume to {volume}")
+        self.volume_slider_label.text = f"Volume: {volume}%{' '*self.GetVolumeSpace(volume)}"
         self.player.audio_set_volume(volume)
         
     def VolumeUp(self, widget=''):
-        volume = int(self.volume_slider.value)
-        volume += 5 - (volume % 5) - ((volume // 100) * 5)
-        self.volume_slider.value = volume
-        self.volume_slider_label.text = f"Volume: {volume}%"
-        self.player.audio_set_volume(volume)
+        volume = round(self.volume_slider.value)
+        volume_up = volume + (5 - (volume % 5) - ((volume // 100) * 5))
+        print(f"DEBUG: VolumeUp from {volume} to {volume_up}")
+        self.volume_slider.value = volume_up
+        self.volume_slider_label.text = f"Volume: {volume_up}%{' '*self.GetVolumeSpace(volume_up)}"
+        self.player.audio_set_volume(volume_up)
     
     def VolumeDown(self, widget=''):
-        volume = int(self.volume_slider.value)
-        volume -= (volume > 0) * ((volume % 5) + ((volume % 5 == 0) * 5))
-        self.volume_slider.value = volume
-        self.volume_slider_label.text = f"Volume: {volume}%"
-        self.player.audio_set_volume(volume)
+        volume = round(self.volume_slider.value)
+        volume_down = volume - ((volume > 0) * ((volume % 5) + ((volume % 5 == 0) * 5)))
+        print(f"DEBUG: VolumeDown from {volume} to {volume_down}")
+        self.volume_slider.value = volume_down
+        self.volume_slider_label.text = f"Volume: {volume_down}%{' '*self.GetVolumeSpace(volume_down)}"
+        self.player.audio_set_volume(volume_down)
     
     def ToggleVisibleVLC(self, widget=''):
         if self.vlc_window.visible:
