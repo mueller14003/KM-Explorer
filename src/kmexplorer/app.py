@@ -491,7 +491,7 @@ class KMExplorer(toga.App):
         )
         
         self.volume_slider = toga.Slider(
-            value=int(volume),
+            value=round(volume),
             range=(0,100),
             tick_count=101,
             style=Pack(
@@ -502,7 +502,7 @@ class KMExplorer(toga.App):
         )
         
         self.volume_slider_label = toga.Label(
-            text=f"Volume: {volume}%",
+            text=f"Volume: {round(volume)}%",
             style=Pack(padding_bottom=3)
         )
         
