@@ -3,7 +3,7 @@ Play media from local, network, and Google Drive folders
 """
 import os
 
-TESTING = False
+TESTING = True
 START_PATH = ['app','src'][TESTING]
 
 CWD = os.getcwd()
@@ -55,6 +55,7 @@ TIMEOUT_TIME = 2
 _ESCAPE = WinForms.Keys.Escape
 _SPACE = WinForms.Keys.Space
 _DELETE = WinForms.Keys.Delete
+_ENTER = WinForms.Keys.Enter
 
 _UP = WinForms.Keys.Up
 _DOWN = WinForms.Keys.Down
@@ -340,7 +341,7 @@ class KMExplorer(toga.App):
         
         self.vlc_window = toga.Window(title=VLC_PLAYER, closeable=False, size=(800,510))
         self.vlc_window._impl.native.KeyPreview = True
-        self.vlc_window._impl.native.PreviewKeyDown += self.control_PreviewKeyDown
+        self.vlc_window._impl.native.PreviewKeyDown += self.enable_arrow_keys_PreviewKeyDown
         self.vlc_window._impl.native.KeyDown += self.vlc_window_KeyDown
         self.vlc_window._impl.native.FormClosing += self.vlc_window_FormClosing
         
@@ -359,7 +360,7 @@ class KMExplorer(toga.App):
             )
         )
         
-        control_box._impl.native.PreviewKeyDown += self.control_PreviewKeyDown
+        control_box._impl.native.PreviewKeyDown += self.enable_arrow_keys_PreviewKeyDown
         
         #region Init Control Box Widgets
         
@@ -555,7 +556,7 @@ class KMExplorer(toga.App):
         #endregion
         
         for control in control_box.children:
-            control._impl.native.PreviewKeyDown += self.control_PreviewKeyDown
+            control._impl.native.PreviewKeyDown += self.enable_arrow_keys_PreviewKeyDown
         
         self.control_box = control_box         
     
@@ -570,6 +571,7 @@ class KMExplorer(toga.App):
             self.mouse_hidden = False
             self.player_panel._impl.native.Cursor.Show()
             self.player_panel._impl.native.ResetMouseEventArgs()
+        event.Handled = True
     
     def player_panel_MouseHover(self, sender, event):
         if self.counter >= 3:
@@ -579,8 +581,9 @@ class KMExplorer(toga.App):
         else:
             self.counter += 1
             self.player_panel._impl.native.ResetMouseEventArgs()
+        event.Handled = True
        
-    def control_PreviewKeyDown(self, sender, event):
+    def enable_arrow_keys_PreviewKeyDown(self, sender, event):
         if event.KeyCode in ARROW_KEYS:
             event.IsInputKey = True
        
@@ -623,6 +626,7 @@ class KMExplorer(toga.App):
     def player_panel_DoubleClick(self, sender, event):
         print("DEBUG: Double-Click On Player Panel - Toggling Fullscreen")
         self.ToggleFullscreenVLC()
+        event.Handled = True
         
         #endregion
             
@@ -823,6 +827,7 @@ class KMExplorer(toga.App):
             else:
                 self.vlc_window.title = f"{filename} - {VLC_PLAYER}"
                 self.vlc_window.show()
+                self.player_panel._impl.native.Focus()
                 
                 self.SetupAudioTracks()
                 self.SetAudioTrackItems()
@@ -1406,6 +1411,14 @@ class KMExplorer(toga.App):
                 if delete_from_repo:
                     row = [folder_name, folder_location]
                     self.DeleteRowFromFolderTable(row)
+        if event.KeyCode == _ENTER:
+            if self.folder_table.selection:
+                if self.folder_type == FolderType.FOLDER_REPO:
+                    self.SetFolderTableFromFolderRepo(row = self.folder_table.selection)
+                if self.folder_type == FolderType.GOOGLE_DRIVE:
+                    self.OnDoubleClickGoogleDriveFile(row = self.folder_table.selection)
+                if self.folder_type == FolderType.LOCAL_OR_NETWORK:
+                    self.OnDoubleClickLocalFile(row = self.folder_table.selection)
         
     def SetFolderTableFromData(self, data, on_double_click, headings):
         self.main_box.remove(self.folder_table)
@@ -1427,6 +1440,7 @@ class KMExplorer(toga.App):
                 self.folder_table._impl.native.Columns[1].Width = 200
         
         self.main_box.add(self.folder_table)
+        self.folder_table.focus()
         
     def SetFolderTable(self, folder_str):
         if self.folder_type == FolderType.INVALID:
