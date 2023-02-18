@@ -2,6 +2,15 @@
 Play media from local, network, and Google Drive folders
 """
 import os
+
+TESTING = False
+START_PATH = ['app','src'][TESTING]
+
+CWD = os.getcwd()
+
+os.environ['PYTHON_VLC_LIB_PATH'] = f"{CWD}\\{START_PATH}\\kmexplorer\\vlc-3.0.18\\libvlc.dll"
+os.environ['PYTHON_VLC_MODULE_PATH'] = f"{CWD}\\{START_PATH}\\kmexplorer\\vlc-3.0.18"
+
 import vlc
 from time import sleep
 from pydrive2.auth import GoogleAuth
@@ -12,8 +21,6 @@ from toga.style import Pack
 from toga.style.pack import COLUMN, ROW, CENTER, RIGHT, LEFT, HIDDEN, VISIBLE, TOP, BOTTOM
 from toga_winforms.libs.winforms import WinForms
 
-TESTING = False
-START_PATH = ['app','src'][TESTING]
 RESOURCES = f"{START_PATH}\\kmexplorer\\resources"
 
 REPO_PATH = f"{RESOURCES}\\repo.txt"
@@ -58,6 +65,66 @@ ARROW_KEYS = [
     _LEFT,
     _RIGHT
 ]
+
+VLC_SUPPORTED_FILE_EXTENSIONS = {
+    '.ASX',
+    '.DTS',
+    '.GXF',
+    '.M2V',
+    '.M3U',
+    '.M4V',
+    '.MPEG1',
+    '.MPEG2',
+    '.MTS',
+    '.MXF',
+    '.OGM',
+    '.PLS',
+    '.BUP',
+    '.A52',
+    '.AAC',
+    '.B4S',
+    '.CUE',
+    '.DIVX',
+    '.DV',
+    '.FLV',
+    '.M1V',
+    '.M2TS',
+    '.MKV',
+    '.MOV',
+    '.MPEG4',
+    '.OMA',
+    '.SPX',
+    '.TS',
+    '.VLC',
+    '.VOB',
+    '.XSPF',
+    '.DAT',
+    '.BIN',
+    '.IFO',
+    '.PART',
+    '.3G2',
+    '.AVI',
+    '.MPEG',
+    '.MPG',
+    '.FLAC',
+    '.M4A',
+    '.MP1',
+    '.OGG',
+    '.WAV',
+    '.XM',
+    '.3GP',
+    '.SRT',
+    '.WMV',
+    '.AC3',
+    '.ASF',
+    '.MOD',
+    '.MP2',
+    '.MP3',
+    '.MP4',
+    '.WMA',
+    '.MKA',
+    '.M4P'
+}
 
 class FolderType(Enum):
     INVALID = 0
@@ -716,7 +783,7 @@ class KMExplorer(toga.App):
         
         #endregion
         
-    def PlayWithVLC(self, input_str):
+    def PlayWithVLC(self, input_str, filename):
         print(f"DEBUG: Playing {input_str} With VLC")
         media = self.VLC_instance.media_new(input_str)
         if self.folder_type == FolderType.GOOGLE_DRIVE:
@@ -741,8 +808,7 @@ class KMExplorer(toga.App):
                 )
                 self.StopVLC()
             else:
-                title = media.get_meta(vlc.Meta.Title)
-                self.vlc_window.title = f"{title} - {VLC_PLAYER}"
+                self.vlc_window.title = f"{filename} - {VLC_PLAYER}"
                 self.vlc_window.show()
                 
                 self.SetupAudioTracks()
@@ -759,6 +825,10 @@ class KMExplorer(toga.App):
                 else:
                     self.mute_button.text = UNMUTE
     
+    def IsPlayableWithVLC(self, filename):
+        file_extension = '.' + filename.split('.')[-1].upper()
+        return file_extension in VLC_SUPPORTED_FILE_EXTENSIONS
+        
     #endregion
 
     #region Get Folder Type
@@ -819,7 +889,13 @@ class KMExplorer(toga.App):
             self.folder_input.value = file_path
             self.SetFolderTable(file_path)
         else:
-            self.PlayWithVLC(file_path)
+            filename = file_path.split('\\')[-1]
+            
+            if self.IsPlayableWithVLC(filename):
+                self.PlayWithVLC(file_path, filename)
+            else:
+                print(f"DEBUG: Opening {filename} with default app")
+                os.startfile(file_path)
         
     def OnDoubleClickLocalFile(self, *args, **kwargs):
         file_path = kwargs["row"].path
@@ -868,11 +944,11 @@ class KMExplorer(toga.App):
         if download_file:
             self.DownloadFileAndPlayInVLC(file)
         else:
-            self.PlayGoogleDriveFileInVLC(file.id)
+            self.PlayGoogleDriveFileInVLC(file)
         
-    def PlayGoogleDriveFileInVLC(self, file_id):
-        url = self.GetGoogleDriveURL(file_id)
-        self.PlayWithVLC(url)
+    def PlayGoogleDriveFileInVLC(self, file):
+        url = self.GetGoogleDriveURL(file.id)
+        self.PlayWithVLC(url, file.name)
     
     def GetGoogleDriveURL(self, file_id):
         return f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media&key={API_KEY}"
