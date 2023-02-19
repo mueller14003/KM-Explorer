@@ -3,7 +3,7 @@ Play media from local, network, and Google Drive folders
 """
 import os
 
-TESTING = False
+TESTING = True
 START_PATH = ['app','src'][TESTING]
 
 CWD = os.getcwd()
@@ -934,6 +934,7 @@ class KMExplorer(toga.App):
         self.SetFolderTableFromData(local_data, self.OnDoubleClickLocalFile, ["Name", "Path"])
         
     def OpenLocalFile(self, file_path):
+        file_path = str(file_path)
         print(f"DEBUG: Local File Path = \"{file_path}\"")
         
         if os.path.isdir(file_path):
