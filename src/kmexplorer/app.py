@@ -20,7 +20,7 @@ from enum import Enum
 import toga
 from toga.style import Pack
 from toga.style.pack import COLUMN, ROW, CENTER, RIGHT, LEFT, HIDDEN, VISIBLE, TOP, BOTTOM
-from toga_winforms.libs.winforms import WinForms
+from toga_winforms.libs.winforms import WinForms, Color, Size
 
 #region Setup
 
@@ -562,7 +562,7 @@ class KMExplorer(toga.App):
         for control in control_box.children:
             control._impl.native.PreviewKeyDown += self.enable_arrow_keys_PreviewKeyDown
         
-        self.control_box = control_box         
+        self.control_box = control_box
     
         #endregion
         
@@ -616,10 +616,7 @@ class KMExplorer(toga.App):
                 print("DEBUG: Left Arrow On VLC Window - Skipping -10 Seconds")
                 self.SkipBackVLC()
         event.Handled = True
-        
-    def GetCurrentWindow(self):
-        return self.main_window._impl.native.ActiveForm
-        
+  
     def vlc_window_FormClosing(self, sender, event):
         active_form = self.GetCurrentWindow()
         if VLC_PLAYER in active_form.Text:
@@ -635,7 +632,9 @@ class KMExplorer(toga.App):
         #endregion
             
         #region VLC Player Functions
-        
+    
+            #region Volume Controls
+    
     def GetVolumeSpace(self, volume):
         if volume > 0:
             return int(4 - (int(math.log10(volume))))
@@ -663,23 +662,21 @@ class KMExplorer(toga.App):
         self.volume_slider_label.text = f"Volume: {volume_down}%{' '*self.GetVolumeSpace(volume_down)}"
         self.player.audio_set_volume(volume_down)
     
-    def ToggleVisibleVLC(self, widget=''):
-        if self.vlc_window.visible:
-            print("DEBUG: Hiding VLC Window")
-            self.vlc_window.hide()
-        else:
-            print("DEBUG: Showing VLC Window")
-            self.vlc_window.show()
+    def ToggleMute(self, widget=''):
+        if self.player.will_play():
+            if self.player.audio_get_mute():
+                print("DEBUG: Unmuting Audio")
+                self.mute_button.text = UNMUTE
+            else:
+                print("DEBUG: Muting Audio")
+                self.mute_button.text = MUTE
+                
+            self.player.audio_toggle_mute()
+            
+            #endregion
     
-    def StopVLC(self, widget='', hide=True):
-        print("DEBUG: Stopping VLC Playback, Exiting Fullscreen, And Hiding Window")
-        self.player.stop()
-        self.vlc_window.title = VLC_PLAYER
-        self.exit_full_screen()
-        self.RefreshControlMenu()
-        if hide:
-            self.vlc_window.hide()
-
+            #region Control Menu
+    
     def RefreshControlMenu(self, widget=''):
         if self.vlc_window.visible:
             if self.vlc_box.children.__contains__(self.control_box):
@@ -708,6 +705,21 @@ class KMExplorer(toga.App):
                 )
                 self.vlc_box.add(self.control_box)
     
+            #endregion
+    
+            #region Window Controls
+    
+    def GetCurrentWindow(self):
+        return self.main_window._impl.native.ActiveForm
+    
+    def ToggleVisibleVLC(self, widget=''):
+        if self.vlc_window.visible:
+            print("DEBUG: Hiding VLC Window")
+            self.vlc_window.hide()
+        else:
+            print("DEBUG: Showing VLC Window")
+            self.vlc_window.show()
+    
     def ToggleFullscreenVLC(self, widget=''):
         if self.vlc_window.visible:
             if self.is_full_screen:
@@ -730,16 +742,18 @@ class KMExplorer(toga.App):
                     self.vlc_box.remove(self.control_box)
                 self.set_full_screen(self.vlc_window)
     
-    def ToggleMute(self, widget=''):
-        if self.player.will_play():
-            if self.player.audio_get_mute():
-                print("DEBUG: Unmuting Audio")
-                self.mute_button.text = UNMUTE
-            else:
-                print("DEBUG: Muting Audio")
-                self.mute_button.text = MUTE
-                
-            self.player.audio_toggle_mute()
+            #endregion
+    
+            #region Playback Controls
+    
+    def StopVLC(self, widget='', hide=True):
+        print("DEBUG: Stopping VLC Playback, Exiting Fullscreen, And Hiding Window")
+        self.player.stop()
+        self.vlc_window.title = VLC_PLAYER
+        self.exit_full_screen()
+        self.RefreshControlMenu()
+        if hide:
+            self.vlc_window.hide()
     
     def PlayPauseVLC(self, widget=''):
         if self.player.will_play():
@@ -761,9 +775,9 @@ class KMExplorer(toga.App):
         current_time = self.player.get_time()
         self.player.set_time([0,current_time-10000][current_time-10000>0])
         
-        #endregion
+            #endregion
         
-        #region Audio Track Selection
+            #region Audio Track Selection
         
     def SetupAudioTracks(self, widget=''):
         audio_track_descriptions = self.player.audio_get_track_description()
@@ -779,9 +793,9 @@ class KMExplorer(toga.App):
     def SetAudioTrackItems(self):
         self.audio_tracks.items = sorted([*self.audio_track_dict.keys()], key=self.audio_track_dict.get)
         
-        #endregion
+            #endregion
     
-        #region Subtitle Selection
+            #region Subtitle Selection
         
     def SetupSubtitles(self, widget=''):
         subtitle_descriptions = self.player.video_get_spu_description()
@@ -802,8 +816,8 @@ class KMExplorer(toga.App):
             print(f"\n\nSORTED SUBS: {sorted_subs}\n\n")
             self.subtitles.value = sorted_subs[1]
         
-        #endregion
-                
+            #endregion
+         
     def AdjustDropDownWidth(self, combo_box):
         if combo_box.items:
             width = combo_box._impl.native.DropDownWidth
@@ -814,6 +828,12 @@ class KMExplorer(toga.App):
             width = max_width if max_width > width else width
             
             combo_box._impl.native.DropDownWidth = width
+            
+    def IsPlayableWithVLC(self, filename):
+        file_extension = '.' + filename.split('.')[-1].upper()
+        return file_extension in VLC_SUPPORTED_FILE_EXTENSIONS    
+         
+        #endregion
         
     def PlayWithVLC(self, input_str, filename):
         print(f"DEBUG: Playing {input_str} With VLC")
@@ -859,11 +879,7 @@ class KMExplorer(toga.App):
                     self.mute_button.text = MUTE
                 else:
                     self.mute_button.text = UNMUTE
-    
-    def IsPlayableWithVLC(self, filename):
-        file_extension = '.' + filename.split('.')[-1].upper()
-        return file_extension in VLC_SUPPORTED_FILE_EXTENSIONS
-        
+            
     #endregion
 
     #region Get Folder Type
@@ -1452,7 +1468,7 @@ class KMExplorer(toga.App):
         self.folder_table._impl.native.KeyDown += self.folder_table_KeyDown
         
         if len(headings) > 0:
-            self.folder_table._impl.native.Columns[0].Width = 300
+            self.folder_table._impl.native.Columns[0].Width = 400
             if len(headings) == 2:
                 self.folder_table._impl.native.Columns[1].Width = 200
         
