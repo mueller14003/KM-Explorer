@@ -1,7 +1,7 @@
 [tool.briefcase]
 project_name = "KM Explorer"
 bundle = "com.kylemueller.kmexplorer"
-version = "1.3.6"
+version = "1.3.7"
 url = "https://github.com/mueller14003/KM-Explorer"
 license = "BSD license"
 author = 'Kyle Mueller'
