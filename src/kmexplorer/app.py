@@ -14,6 +14,8 @@ os.environ['PYTHON_VLC_MODULE_PATH'] = f"{CWD}\\{START_PATH}\\kmexplorer\\vlc-3.
 import vlc
 import math
 from time import sleep
+import requests
+import webbrowser
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 from enum import Enum
@@ -245,6 +247,19 @@ class KMExplorer(toga.App):
 
             #endregion
         
+            #region Help Group
+            
+        help_group = toga.Group.HELP
+        
+        check_latest = toga.Command(
+            self.CheckLatestVersion,
+            label="Check For Updates",
+            group=help_group,
+            section=1
+        )
+            
+            #endregion
+        
         self.commands.add(
             play_pause, 
             stop, 
@@ -255,7 +270,8 @@ class KMExplorer(toga.App):
             google_authenticate, 
             download_gdrive_folder, 
             save_folder_to_repo, 
-            load_folder_repo
+            load_folder_repo,
+            check_latest
         )
         
         #endregion
@@ -307,6 +323,26 @@ class KMExplorer(toga.App):
         if event.KeyChar == '\r':
             self.OnClickGetFolderContents()
             event.Handled = True
+            
+    def CheckLatestVersion(self, widget=''):
+        try:
+            latest = f"{self.home_page}/releases/latest"
+            response = requests.get(latest)
+            version = response.url.split('/')[-1][1:]
+            
+            if self.version != version:
+                webbrowser.open(latest)
+            else:
+                self.main_window.info_dialog(
+                    "Already Up To Date",
+                    f"You already have the latest version (v{version})."
+                )
+        except Exception as err:
+            print(f"EXCEPTION WHILE CHECKING FOR LATEST: {err}")
+            self.main_window.error_dialog(
+                "Error Checking For Updates",
+                "There was an error while checking for updates.\n\nPlease try again later."
+            )
 
 #endregion
 
