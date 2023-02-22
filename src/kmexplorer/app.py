@@ -40,6 +40,7 @@ with open(f"{RESOURCES}\\API_KEY.txt", "r", encoding='utf-8') as f:
 FOLDER_REPO = "Folder Repo"
 VLC_PLAYER =  "VLC Player"
 GET_FOLDER = "Enter Folder Name"
+RENAME_FOLDER = "Rename Folder"
 PLAY_PAUSE = '⏯'
 PLAY = '⏵︎'
 PAUSE = '⏸︎'
@@ -58,6 +59,8 @@ _ESCAPE = WinForms.Keys.Escape
 _SPACE = WinForms.Keys.Space
 _DELETE = WinForms.Keys.Delete
 _ENTER = WinForms.Keys.Enter
+
+_R = WinForms.Keys.R
 
 _UP = WinForms.Keys.Up
 _DOWN = WinForms.Keys.Down
@@ -1130,8 +1133,8 @@ class KMExplorer(toga.App):
             )
         )
         
-        input_label = toga.Label(
-            text="Google Drive Folder Name: ",
+        self.folder_name_input_label = toga.Label(
+            text="Folder Name: ",
             style=Pack(
                 padding=5
             )
@@ -1146,17 +1149,17 @@ class KMExplorer(toga.App):
         )        
         self.folder_name_input._impl.native.KeyPress += self.OnEnterPress
 
-        button = toga.Button(
-            label="Save Folder",
+        self.folder_save_button = toga.Button(
+            label="Save",
             on_press=self.SaveFolderToRepo,
             style=Pack(
                 padding=5
             )
         )
 
-        text_entry_box.add(input_label)
+        text_entry_box.add(self.folder_name_input_label)
         text_entry_box.add(self.folder_name_input)
-        text_entry_box.add(button)
+        text_entry_box.add(self.folder_save_button)
         
         self.text_entry_window = toga.Window(
             title=GET_FOLDER, 
@@ -1170,11 +1173,16 @@ class KMExplorer(toga.App):
         self.text_entry_window.content = text_entry_box
     
     def folder_name_FormClosing(self, sender, event):
-        if list(self.windows.elements)[0]._impl.native.ActiveForm.Text == GET_FOLDER:
-            print("DEBUG: Close Get Folder Name Window Clicked, Hiding Window Instead")
-            event.Cancel = True
-            self.folder_name_input.value = ''
-            self.text_entry_window.hide()
+        print("DEBUG: Close Get Folder Name Window Clicked, Hiding Window Instead")
+        event.Cancel = True
+        self.CloseTextEntryWindow()
+
+    def CloseTextEntryWindow(self):
+        self.text_entry_window.hide()
+        self.folder_name_input_label.text = "Folder Name: "
+        self.folder_name_input.value = ''
+        self.folder_save_button.on_press = self.SaveFolderToRepo
+        self.text_entry_window.title = GET_FOLDER
 
             #endregion
             
@@ -1211,16 +1219,16 @@ class KMExplorer(toga.App):
             else: 
                 self.ImportFolderRepo(set_folder_table=False)
             
-        self.folder_name_input.value = ''
-        self.text_entry_window.show()
+        self.text_entry_window._impl.native.ShowDialog(self.main_window._impl.native)
     
     def SaveUpdatedFolderRepo(self):
         with open(self.folder_repo_filename, "w", encoding='utf-8') as f:
             f.writelines([*map(','.join, self.folder_repo)])
     
     def SaveFolderToRepo(self, widget=''):
-        self.text_entry_window.hide()
         folder_name = self.folder_name_input.value.replace(',','_')
+        
+        self.CloseTextEntryWindow()
         
         folder_location = self.folder_input.value
         
@@ -1489,6 +1497,37 @@ class KMExplorer(toga.App):
                     self.OnDoubleClickGoogleDriveFile(row = self.folder_table.selection)
                 if self.folder_type == FolderType.LOCAL_OR_NETWORK:
                     self.OnDoubleClickLocalFile(row = self.folder_table.selection)
+        if event.KeyCode == _R:
+            if self.folder_table.selection and self.folder_type == FolderType.FOLDER_REPO:
+                self.old_folder_name = self.folder_table.selection.name
+                self.folder_location = self.folder_table.selection.location
+                
+                self.folder_name_input.value = self.old_folder_name
+                self.folder_name_input_label.text = f"Rename \"{self.old_folder_name}\": "
+                self.text_entry_window.title = RENAME_FOLDER
+                self.folder_save_button.on_press = self.RenameFolderRepoFolder
+                self.text_entry_window._impl.native.ShowDialog(self.main_window._impl.native)
+     
+    def RenameFolderRepoFolder(self, widget=''):
+        old_folder_name = self.old_folder_name
+        folder_location = self.folder_location
+        folder_name = self.folder_name_input.value.replace(',','_')
+
+        self.CloseTextEntryWindow()
+        
+        try:
+            index = self.folder_repo.index([old_folder_name, folder_location])
+            self.folder_repo[index] = [folder_name, folder_location]
+            
+            self.SaveUpdatedFolderRepo()
+                
+            self.SetFolderTableFolderRepo()
+        except Exception as err:
+            print(f"DEBUG: ERROR WHILE RENAMING FOLDER\n\n{err}\n\n")
+            self.main_window.error_dialog(
+                title="Error While Renaming Folder",
+                message=f"Unfortunately there was an error while renaming the folder from \"{old_folder_name}\" to \"{folder_name}\". Please try again later."
+            )
         
     def SetFolderTableFromData(self, data, on_double_click, headings):
         self.main_box.remove(self.folder_table)
