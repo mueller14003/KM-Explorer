@@ -5,7 +5,7 @@ KM Explorer
 `The BeeWare Project`_. **If you want to see more tools like Briefcase, please
 consider** `becoming a financial member of BeeWare`_.
 
-Play media from local, network, and Google Drive folders
+Download and play media from local, network, and Google Drive folders
 
 .. _`Briefcase`: https://github.com/beeware/briefcase
 .. _`The BeeWare Project`: https://beeware.org/

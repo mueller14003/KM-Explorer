@@ -2,6 +2,7 @@
 Play media from local, network, and Google Drive folders
 """
 import os
+import aiofiles
 
 TESTING = True
 START_PATH = ['app','src'][TESTING]
@@ -14,6 +15,8 @@ os.environ['PYTHON_VLC_MODULE_PATH'] = f"{CWD}\\{START_PATH}\\kmexplorer\\vlc-3.
 import vlc
 import math
 from time import sleep
+import aiohttp
+import asyncio
 import requests
 import webbrowser
 from pydrive2.auth import GoogleAuth
@@ -41,6 +44,7 @@ FOLDER_REPO = "Folder Repo"
 VLC_PLAYER =  "VLC Player"
 GET_FOLDER = "Enter Folder Name"
 RENAME_FOLDER = "Rename Folder"
+PROGRESS_WINDOW = "Download Progress"
 PLAY_PAUSE = '⏯'
 PLAY = '⏵︎'
 PAUSE = '⏸︎'
@@ -150,7 +154,7 @@ class KMExplorer(toga.App):
         self.drive = GoogleDrive()
         self.google_folder_id = ''
         self.mouse_hidden = False
-        self.counter = 0
+        self.mouse_counter = 0
         
         #region Commands
         
@@ -308,7 +312,10 @@ class KMExplorer(toga.App):
         
         self.InitFolderTable()
         self.InitTextEntryWindow()
+        self.InitDownloadProgressBarWindow()
         self.InitVLCWindow()
+
+    #region Supporting Methods
 
     def ChangeButton(self, widget=''):
         if self.folder_input.value:
@@ -346,7 +353,8 @@ class KMExplorer(toga.App):
                 "Error Checking For Updates",
                 "There was an error while checking for updates.\n\nPlease try again later."
             )
-
+    #endregion
+    
 #endregion
 
     #region VLC Player
@@ -545,7 +553,7 @@ class KMExplorer(toga.App):
                 alignment=BOTTOM,
                 height=25
             ),
-            on_slide=self.SetVolume
+            on_change=self.SetVolume
         )
         
         self.volume_slider_label = toga.Label(
@@ -608,7 +616,7 @@ class KMExplorer(toga.App):
         #region Event Handler Overrides
     
     def player_panel_MouseMove(self, sender, event):
-        self.counter = 0
+        self.mouse_counter = 0
         if self.mouse_hidden:
             print("DEBUG: Show Mouse")
             self.mouse_hidden = False
@@ -617,12 +625,12 @@ class KMExplorer(toga.App):
         event.Handled = True
     
     def player_panel_MouseHover(self, sender, event):
-        if self.counter >= 3:
+        if self.mouse_counter >= 3:
             print("DEBUG: Hide Mouse")
             self.mouse_hidden = True
             self.player_panel._impl.native.Cursor.Hide()
         else:
-            self.counter += 1
+            self.mouse_counter += 1
             self.player_panel._impl.native.ResetMouseEventArgs()
         event.Handled = True
        
@@ -900,7 +908,9 @@ class KMExplorer(toga.App):
                 self.StopVLC()
             else:
                 self.vlc_window.title = f"{filename} - {VLC_PLAYER}"
+                self.vlc_window._impl.native.WindowState = WinForms.FormWindowState.Minimized
                 self.vlc_window.show()
+                self.vlc_window._impl.native.WindowState = WinForms.FormWindowState.Normal
                 self.player_panel._impl.native.Focus()
                 
                 self.SetupAudioTracks()
@@ -1189,7 +1199,7 @@ class KMExplorer(toga.App):
             #region Save Folder Methods
             
     def ShowSaveFolderPrompt(self, widget=''):
-        if not self.folder_table.data:
+        if not self.folder_table.data or self.folder_type == FolderType.FOLDER_REPO:
             return self.main_window.error_dialog(
                 title="No Folder Open",
                 message="You do not have a folder open.\n\nPlease open a folder and try again."
@@ -1216,7 +1226,7 @@ class KMExplorer(toga.App):
                         message="You did not import or create a Folder Repo."
                     )
 
-            else: 
+            else:
                 self.ImportFolderRepo(set_folder_table=False)
             
         self.text_entry_window._impl.native.ShowDialog(self.main_window._impl.native)
@@ -1294,7 +1304,7 @@ class KMExplorer(toga.App):
         folder_repo = [[]]
         
         with open(filename, "r", encoding='utf-8') as f:
-            folder_repo = [*map(lambda line: line.split(','), f.readlines())]
+            folder_repo = sorted([*map(lambda line: line.split(','), f.readlines())], key=lambda l: l[0])
             
         if self.invalid_folder_repo(folder_repo):
             self.show_folder_repo_err(folder_repo)
@@ -1393,6 +1403,34 @@ class KMExplorer(toga.App):
     
     #region Download Google Drive
     
+    def InitDownloadProgressBarWindow(self, widget=''):
+        self.download_progress_label = toga.Label(
+            text="Downloading File",
+            style=Pack(padding=5)
+        )
+        
+        self.progress_bar = toga.ProgressBar(
+            value=0,
+            max=100
+        )
+        
+        self.progress_box = toga.Box(
+            style=Pack(
+                direction=COLUMN,
+                padding=5
+            )
+        )
+        
+        self.progress_box.add(self.download_progress_label)
+        self.progress_box.add(self.progress_bar)
+        
+        self.progress_window = toga.Window(title=PROGRESS_WINDOW, closeable=False, size=(400,80))
+        
+        self.windows.add(self.progress_window)
+        self.progress_window.content = self.progress_box
+        
+        self.progress_window.hide()
+    
     def DownloadGoogleDriveFolder(self, widget=''):
         if self.google_folder_id:
             download_folder = self.main_window.select_folder_dialog(
@@ -1402,14 +1440,16 @@ class KMExplorer(toga.App):
             
             if not download_folder:
                 download_folder = "%USERPROFILE%\\Downloads"
+            download_file = f"{download_folder}\\%s"
             
             file_list = self.drive.ListFile({'q': f"'{self.google_folder_id}' in parents and trashed=false"}).GetList()
             
-            for i, file in enumerate(sorted(file_list, key = lambda x: x['title']), start=1):
-                print('Downloading {} from Google Drive ({}/{})'.format(file['title'], i, len(file_list)))
-                file.GetContentFile(f"{download_folder}\{file['title']}")
-                
-            self.SetFolderTableLocal(download_folder)
+            async def CustomDownloadFolder(widget, **kwargs):
+                asyncio.gather(*map(lambda i, file: asyncio.create_task(self.DownloadFile(file['id'], download_file % file['title'], False, False)), *zip(*enumerate(sorted(file_list, key = lambda x: x['title']), start=1))))
+                self.SetFolderTableLocal(download_folder)
+            
+            self.app.add_background_task(CustomDownloadFolder)
+                        
         else:
             self.main_window.error_dialog(
                 title="No Google Drive Folder Selected",
@@ -1426,14 +1466,79 @@ class KMExplorer(toga.App):
             download_path = f"%USERPROFILE%\\Downloads\\{file.name}"
             
         print(f"DEBUG: Downloading file \"{download_path}\"")
+        
+        async def CustomDownloadFile(widget, **kwargs):
+            await self.DownloadFile(file.id, download_path, True, True)
+        
+        self.app.add_background_task(CustomDownloadFile)
+    
+    async def DownloadFile(self, file_id, download_path, play_after_download, show_progress_bar):
+        file_name = str(download_path).split('\\')[-1]
+        
+        if show_progress_bar:
+            self.download_progress_label.text = f"Downloading \"{file_name}\""
+            self.progress_bar.value = 0
+        
+        async with aiohttp.ClientSession(read_bufsize=2**20) as client:
+            data = await self.FetchFile(client, file_id, show_progress_bar)
             
-        gdrive_file = self.drive.CreateFile({'id': file.id})
-        gdrive_file.GetContentFile(download_path)
+            if data:
+                async with aiofiles.open(download_path, "wb") as f:
+                    await f.write(data)
+            else:
+                self.main_window.error_dialog(
+                    title="Download Failed",
+                    message=f"Failed to download \"{file_name}\". Please try again later."
+                )
+                return
+
+        print(f"Finished Downloading \"{file_name}\"")
         
-        row = lambda: None
-        row.path = download_path
+        if play_after_download:
+            row = lambda: None
+            row.path = download_path
+            
+            self.OnDoubleClickLocalFile(row=row)
+    
+    async def FetchFile(self, client, file_id, show_progress_bar):
+        headers = {"Authorization": f"Bearer {self.gauth_token}",
+                   "Accept": "application/json"}
+        params = {"supportsAllDrives": "true"}
         
-        self.OnDoubleClickLocalFile(row=row)
+        async with client.get(self.GetGoogleDriveURL(file_id), params=params, headers=headers) as resp:
+            if resp.status == 200:
+                print(f"Low Water {resp.content._low_water}\nHigh Water {resp.content._high_water}")
+                
+                file_size = int(resp.content_length)
+                chunk_size = file_size // 100
+                print(f"File Size: {file_size}")
+                
+                data = bytearray()
+                if show_progress_bar and chunk_size >= 2**20:
+                    self.download_progress_label.text += f" ({file_size/2**20:0.1f} MB)"
+                    self.progress_window.show()
+                    self.progress_bar.start()
+                    
+                    while True:
+                        try:
+                            chunk = await resp.content.readexactly(chunk_size)
+                        except:
+                            chunk = await resp.content.read()
+                        if not chunk:
+                            break
+                        
+                        data += chunk
+                        self.progress_bar.value = round((len(data) / file_size) * 100)
+
+                    self.progress_bar.stop()
+                    self.progress_window.hide()
+                else:
+                    data = await resp.content.read()
+                
+                return data
+            
+            else:
+                return None
     
     #endregion
     
