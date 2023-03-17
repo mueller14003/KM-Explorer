@@ -41,7 +41,8 @@ requires = [
     'certifi>=2017.4.17',
     'idna<4,>=2.5',
     'aiohttp>=3.8.4',
-    'aiofiles>=23.1.0' 
+    'aiofiles>=23.1.0',
+    'requests>=2.28.2'
 ]
 
 
