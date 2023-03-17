@@ -1005,8 +1005,8 @@ class KMExplorer(toga.App):
     def SetFolderTableLocal(self, folder_str):
         self.google_folder_id = ''
         
-        folder_str.replace('/', '\\')
-        folder_str += '\\' if folder_str[-1] != '\\' else ''
+        folder_str = str(folder_str).replace('/', '\\')
+        folder_str += '\\' * (folder_str[-1] != '\\')
         local_files = os.listdir(folder_str)
         local_data = [['..', self.GetOneFolderUpLocal(folder_str)]] + [*map(lambda file: [file, folder_str + file], local_files)]
         
@@ -1454,13 +1454,12 @@ class KMExplorer(toga.App):
         self.progress_box.add(self.download_progress_label)
         self.progress_box.add(self.progress_bar)
         
-        self.progress_window = toga.Window(title=PROGRESS_WINDOW, closeable=False, size=(450,50))
+        self.progress_window = toga.Window(title=PROGRESS_WINDOW, closeable=False, size=(500,55))
         
         self.windows.add(self.progress_window)
         self.progress_window.content = self.progress_box
         
         self.progress_window.hide()
-    
     
     def DownloadGoogleDriveFolder(self, widget=''):
         if self.google_folder_id:
@@ -1473,10 +1472,30 @@ class KMExplorer(toga.App):
                 download_folder = "%USERPROFILE%\\Downloads"
             download_file = f"{download_folder}\\%s"
             
+            folder = self.drive.CreateFile({'id': self.google_folder_id})
+            folder.FetchMetadata(fields='title')
+            folder_name = folder['title']
+            print(folder_name)
+            
             file_list = self.drive.ListFile({'q': f"'{self.google_folder_id}' in parents and trashed=false"}).GetList()
             
+            parts_per_file = ((NUM_DL_PARTS - 1) // len(file_list)) + 1
+            
             async def CustomDownloadFolder(widget, **kwargs):
-                asyncio.gather(*map(lambda i, file: asyncio.create_task(self.DownloadFile(File(file['id'], file['title'], file['fileSize']), download_file % file['title'], False, False)), *zip(*enumerate(sorted(file_list, key = lambda x: x['title']), start=1))))
+                self.download_progress_label.text = f"Downloading all files in \"{folder_name}\" ({round(sum(map(lambda f: int(f['fileSize']), file_list)) / 2**20, 2):0.1f} MB)"
+                self.progress_bar.max = None
+                self.progress_window.show()
+                self.progress_bar.start()
+                
+                await asyncio.gather(*map(lambda i, file: asyncio.create_task(self.DownloadFile(File(file['id'], file['title'], file['fileSize']), download_file % file['title'], False, False, parts_per_file)), *zip(*enumerate(sorted(file_list, key = lambda x: x['title']), start=1))))
+                
+                self.progress_bar.stop()
+                self.progress_window.hide()
+                
+                self.main_window.info_dialog(
+                    title="Opening Download Folder",
+                    message="Finished downloading files! Opening download folder."
+                )
                 self.SetFolderTableLocal(download_folder)
             
             self.app.add_background_task(CustomDownloadFolder)
@@ -1486,7 +1505,6 @@ class KMExplorer(toga.App):
                 title="No Google Drive Folder Selected",
                 message="Please open a Google Drive folder and try again."
             )
-    
     
     def DownloadFileAndPlayInVLC(self, _file):        
         download_path = self.main_window.save_file_dialog(
@@ -1512,21 +1530,34 @@ class KMExplorer(toga.App):
             # Each partial download is limited to 20 mbps and my internet speed is 250 mbps, 
             # so I chose NUM_DL_PARTS = 12 because 12 * 20 mbps = 240 mbps. 
             # You can adjust this number according to your own internet speed.
-            await self.DownloadFileP(file, download_path, True, True, NUM_DL_PARTS)
+            await self.DownloadFile(file, download_path, True, True, NUM_DL_PARTS)
         
         self.app.add_background_task(CustomDownloadFile)
     
-    
-    async def DownloadFileP(self, file : File, download_path, play_after_download, show_progress_bar, num_parts):
+    async def DownloadPart(self, file, show_progress_bar, start_byte, end_byte):
+        async with aiohttp.ClientSession(read_bufsize=MIN_CHUNK_SIZE) as client:
+            data = await self.FetchFile(client, file, show_progress_bar, partitioned=True, start_byte=start_byte, end_byte=end_byte)
+            
+        return data
+
+    async def DownloadFile(self, file : File, download_path, play_after_download, show_progress_bar, num_parts=None):
         if show_progress_bar:
             self.progress_window.show()
             self.progress_bar.start()
         
-        print(file.CreatePartitions(num_parts))
-        
-        data_list = await asyncio.gather(*map(lambda part: self.DownloadPart(file, show_progress_bar, part[0], part[1]), file.CreatePartitions(num_parts)))
+        if num_parts and file.size >= (MIN_CHUNK_SIZE*100):
+            data_list = await asyncio.gather(*map(lambda part: self.DownloadPart(file, show_progress_bar, part[0], part[1]), file.CreatePartitions(num_parts)))
             
-        if not data_list:
+            if not data_list or not all(data_list):
+                data = None
+            else:
+                data = reduce(lambda a, b: a + b, data_list)
+                    
+        else:
+            async with aiohttp.ClientSession(read_bufsize=MIN_CHUNK_SIZE) as client:
+                data = await self.FetchFile(client, file, show_progress_bar)
+                
+        if not data:
             self.main_window.error_dialog(
                 title="Download Failed",
                 message=f"Failed to download \"{file.name}\". Please try again later."
@@ -1534,63 +1565,24 @@ class KMExplorer(toga.App):
             return
         
         async with aiofiles.open(download_path, "wb") as f:
-            for data in data_list:
-                await f.write(data)
+            await f.write(data)
             
         if show_progress_bar:
             self.progress_bar.stop()
             self.progress_window.hide()
             
-        print(f"Finished Downloading \"{file.name}\"")
+        print(f"\nFinished Downloading \"{file.name}\"!\n")
         
         if play_after_download:
             row = lambda: None
             row.path = download_path
             
             self.OnDoubleClickLocalFile(row=row)
-          
-            
-    async def DownloadPart(self, file, show_progress_bar, start_byte, end_byte):
-        async with aiohttp.ClientSession(read_bufsize=MIN_CHUNK_SIZE) as client:
-            data = await self.FetchFile(client, file, show_progress_bar, partitioned=True, start_byte=start_byte, end_byte=end_byte)
-            
-        return data
-    
-    
-    async def DownloadFile(self, file : File, download_path, play_after_download, show_progress_bar):    
-        if show_progress_bar:
-            self.progress_window.show()
-            self.progress_bar.start()
-        
-        async with aiohttp.ClientSession(read_bufsize=MIN_CHUNK_SIZE) as client:
-            data = await self.FetchFile(client, file, show_progress_bar)
-            
-            if show_progress_bar:
-                self.progress_bar.stop()
-                self.progress_window.hide()
-            
-            if data:
-                async with aiofiles.open(download_path, "wb") as f:
-                    await f.write(data)
-            else:
-                self.main_window.error_dialog(
-                    title="Download Failed",
-                    message=f"Failed to download \"{file.name}\". Please try again later."
-                )
-                return
 
-        print(f"Finished Downloading \"{file.name}\"")
-        
-        if play_after_download:
-            row = lambda: None
-            row.path = download_path
-            
-            self.OnDoubleClickLocalFile(row=row)
-    
-    
     async def FetchFile(self, client : aiohttp.ClientSession, file : File, show_progress_bar, partitioned=False, start_byte=None, end_byte=None):
         headers = {"Authorization": f"Bearer {self.gauth_token}",
                    "Accept": "application/json"}
+        params = {"supportsAllDrives": "true"}
         
         download_string = f"Downloading \"{file.name}\""
         
@@ -1600,28 +1592,28 @@ class KMExplorer(toga.App):
         
         print(download_string)
         
-        params = {"supportsAllDrives": "true"}
-        
         async with client.get(self.GetGoogleDriveURL(file.id), params=params, headers=headers) as resp:
             if resp.status in [200, 206]:
-                
                 data = bytearray()
                 if show_progress_bar and file.chunk_size >= MIN_CHUNK_SIZE:
                     async for chunk, _ in resp.content.iter_chunks():
                         data += chunk
                         self.progress_bar.value += len(chunk)
                     
-                    difference = len(data) - (end_byte - start_byte)
-                    print(f"Downloaded {len(data)}, Expected {end_byte - start_byte}; Difference = {difference}")
+                    data_len = len(data)
+                    difference = data_len - (end_byte - start_byte)
+                    print(f"\nDownloaded {data_len}, Expected {end_byte - start_byte}; Difference = {difference}")
                     
                     if (difference > 0):
+                        print(f"Pesky extra data: {data[-difference:]}")
                         data = data[:-difference]
-                        difference = len(data) - (end_byte - start_byte)
-                        print(f"After fix: Downloaded {len(data)}, Expected {end_byte - start_byte}; Difference = {difference}")
+                        
+                        data_len = len(data)
+                        difference = data_len - (end_byte - start_byte)
+                        print(f"After fix: Downloaded {data_len}, Expected {end_byte - start_byte}; Difference = {difference}")
                     
                 else:
                     data = await resp.content.read()
-                
                 
                 return data
             
