@@ -1475,28 +1475,35 @@ class KMExplorer(toga.App):
             folder = self.drive.CreateFile({'id': self.google_folder_id})
             folder.FetchMetadata(fields='title')
             folder_name = folder['title']
-            print(folder_name)
             
             file_list = self.drive.ListFile({'q': f"'{self.google_folder_id}' in parents and trashed=false"}).GetList()
+            num_files = len(file_list)
             
-            parts_per_file = ((NUM_DL_PARTS - 1) // len(file_list)) + 1
+            parts_per_file = ((NUM_DL_PARTS - 1) // num_files) + 1
+            
+            folder_size = sum(map(lambda f: int(f['fileSize']), file_list))
+            self.download_progress_label.text = f"Downloading all files in \"{folder_name}\" ({round(folder_size / 2**20, 2):0.1f} MB)"
+            self.progress_bar.max = folder_size + ((parts_per_file - 1) * num_files)
+            self.progress_bar.value = 0
+            
+            print(f"\nDownloading folder \"{folder_name}\"\nFolder size: {folder_size}\n")
             
             async def CustomDownloadFolder(widget, **kwargs):
-                self.download_progress_label.text = f"Downloading all files in \"{folder_name}\" ({round(sum(map(lambda f: int(f['fileSize']), file_list)) / 2**20, 2):0.1f} MB)"
-                self.progress_bar.max = None
                 self.progress_window.show()
                 self.progress_bar.start()
                 
-                await asyncio.gather(*map(lambda i, file: asyncio.create_task(self.DownloadFile(File(file['id'], file['title'], file['fileSize']), download_file % file['title'], False, False, parts_per_file)), *zip(*enumerate(sorted(file_list, key = lambda x: x['title']), start=1))))
+                await asyncio.gather(*map(lambda i, file: asyncio.create_task(self.DownloadFile(File(file['id'], file['title'], file['fileSize']), download_file % file['title'], True, parts_per_file)), *zip(*enumerate(sorted(file_list, key = lambda x: x['title']), start=1))))
                 
                 self.progress_bar.stop()
                 self.progress_window.hide()
                 
-                self.main_window.info_dialog(
+                open_folder = self.main_window.question_dialog(
                     title="Opening Download Folder",
-                    message="Finished downloading files! Opening download folder."
-                )
-                self.SetFolderTableLocal(download_folder)
+                    message=f"Finished downloading files in \"{folder_name}\"!\n\nWould you like to open the download folder?"
+                ).future.result()
+                
+                if open_folder:
+                    self.SetFolderTableLocal(download_folder)
             
             self.app.add_background_task(CustomDownloadFolder)
                         
@@ -1524,13 +1531,30 @@ class KMExplorer(toga.App):
         self.progress_bar.max = file.size + NUM_DL_PARTS - 1
         self.progress_bar.value = 0
         
-        print(f"\nDownloading file \"{download_path}\"\nFile Size: {file.size}\n")
+        print(f"\nDownloading file \"{download_path}\"\nFile size: {file.size}\n")
         
         async def CustomDownloadFile(widget, **kwargs):
+            self.progress_window.show()
+            self.progress_bar.start()
+            
             # Each partial download is limited to 20 mbps and my internet speed is 250 mbps, 
             # so I chose NUM_DL_PARTS = 12 because 12 * 20 mbps = 240 mbps. 
             # You can adjust this number according to your own internet speed.
-            await self.DownloadFile(file, download_path, True, True, NUM_DL_PARTS)
+            await self.DownloadFile(file, download_path, True, NUM_DL_PARTS)
+            
+            self.progress_bar.stop()
+            self.progress_window.hide()
+            
+            open_file = self.main_window.question_dialog(
+                title="Download Finished",
+                message=f"Finished downloading \"{file.name}\"!\n\nWould you like to play the file?"
+            ).future.result()
+            
+            if open_file:
+                row = lambda: None
+                row.path = download_path
+                
+                self.OnDoubleClickLocalFile(row=row)
         
         self.app.add_background_task(CustomDownloadFile)
     
@@ -1540,11 +1564,7 @@ class KMExplorer(toga.App):
             
         return data
 
-    async def DownloadFile(self, file : File, download_path, play_after_download, show_progress_bar, num_parts=None):
-        if show_progress_bar:
-            self.progress_window.show()
-            self.progress_bar.start()
-        
+    async def DownloadFile(self, file : File, download_path, show_progress_bar, num_parts=None):
         if num_parts and file.size >= (MIN_CHUNK_SIZE*100):
             data_list = await asyncio.gather(*map(lambda part: self.DownloadPart(file, show_progress_bar, part[0], part[1]), file.CreatePartitions(num_parts)))
             
@@ -1566,18 +1586,8 @@ class KMExplorer(toga.App):
         
         async with aiofiles.open(download_path, "wb") as f:
             await f.write(data)
-            
-        if show_progress_bar:
-            self.progress_bar.stop()
-            self.progress_window.hide()
-            
+
         print(f"\nFinished Downloading \"{file.name}\"!\n")
-        
-        if play_after_download:
-            row = lambda: None
-            row.path = download_path
-            
-            self.OnDoubleClickLocalFile(row=row)
 
     async def FetchFile(self, client : aiohttp.ClientSession, file : File, show_progress_bar, partitioned=False, start_byte=None, end_byte=None):
         headers = {"Authorization": f"Bearer {self.gauth_token}",
