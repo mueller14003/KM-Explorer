@@ -345,7 +345,7 @@ class KMExplorer(toga.App):
         self.InitDownloadProgressBarWindow()
         self.InitVLCWindow()
 
-    #region Supporting Methods
+        #region Supporting Methods
 
     def ChangeButton(self, widget=''):
         if self.folder_input.value:
@@ -383,9 +383,9 @@ class KMExplorer(toga.App):
                 "Error Checking For Updates",
                 "There was an error while checking for updates.\n\nPlease try again later."
             )
-    #endregion
+        #endregion
     
-#endregion
+    #endregion
 
     #region VLC Player
     
@@ -764,23 +764,30 @@ class KMExplorer(toga.App):
             self.InitControlBox()
             self.vlc_box.add(self.control_box)
 
+    def DisableControlMenu(self, widget=''):
+        print("DEBUG: Hiding Control Menu")
+        self.vlc_box.remove(self.control_box)
+
+    def EnableControlMenu(self, widget=''):
+        print("DEBUG: Showing Control Menu")
+        self.InitControlBox(
+            self.play_button.text, 
+            self.mute_button.text,
+            self.audio_tracks.items,
+            self.subtitles.items,
+            self.audio_tracks.value,
+            self.subtitles.value,
+            self.volume_slider.value
+        )
+        self.vlc_box.add(self.control_box)
+
     def ToggleControlMenu(self, widget=''):
         if self.vlc_window.visible:
+            print("DEBUG: Toggling Control Menu Visibility")
             if self.vlc_box.children.__contains__(self.control_box):
-                print("DEBUG: Hiding Control Menu")
-                self.vlc_box.remove(self.control_box)
+                self.DisableControlMenu()
             else:
-                print("DEBUG: Showing Control Menu")
-                self.InitControlBox(
-                    self.play_button.text, 
-                    self.mute_button.text,
-                    self.audio_tracks.items,
-                    self.subtitles.items,
-                    self.audio_tracks.value,
-                    self.subtitles.value,
-                    self.volume_slider.value
-                )
-                self.vlc_box.add(self.control_box)
+                self.EnableControlMenu()
     
             #endregion
     
@@ -802,21 +809,14 @@ class KMExplorer(toga.App):
             if self.is_full_screen:
                 print("DEBUG: Exiting Fullscreen")
                 self.exit_full_screen()
+                
                 if not self.vlc_box.children.__contains__(self.control_box):
-                    self.InitControlBox(
-                        self.play_button.text, 
-                        self.mute_button.text,
-                        self.audio_tracks.items,
-                        self.subtitles.items,
-                        self.audio_tracks.value,
-                        self.subtitles.value,
-                        self.volume_slider.value
-                    )
-                    self.vlc_box.add(self.control_box)
+                    self.EnableControlMenu()
             else:
                 print("DEBUG: Entering Fullscreen")
                 if self.vlc_box.children.__contains__(self.control_box):
-                    self.vlc_box.remove(self.control_box)
+                    self.DisableControlMenu()
+                    
                 self.set_full_screen(self.vlc_window)
     
             #endregion
@@ -916,7 +916,7 @@ class KMExplorer(toga.App):
         print(f"DEBUG: Playing {input_str} With VLC")
         media = self.VLC_instance.media_new(input_str)
         if self.folder_type == FolderType.GOOGLE_DRIVE:
-            http_token = f"--http-token=\'Authorization: Bearer {self.gauth_token}\'"
+            http_token = f"http-token=\'Authorization: Bearer {self.gauth_token}\'"
             print(http_token)
             media.add_option(http_token)
         self.player.set_media(media)
@@ -931,15 +931,28 @@ class KMExplorer(toga.App):
             
             if not self.player.is_playing():
                 print(f"DEBUG: Media State When Failed = {media.get_state()}")
-                self.vlc_window.error_dialog(
-                    "Unable To Play",
-                    f"Unfortunately, VLC Player is unable to play {input_str} at this time."
-                )
-                self.StopVLC()
+                if self.folder_type == FolderType.GOOGLE_DRIVE:
+                    download_file = self.main_window.question_dialog(
+                        title="Unable To Stream File",
+                        message=f"Unable to stream \"{filename}\" at this time.\n\nWould you like to download and play the file?"
+                    ).future.result()
+                    
+                    if download_file:
+                        file = lambda: None
+                        file.id = input_str.split('/')[-1].split('?')[0]
+                        file.name = filename
+                        self.DownloadFileAndPlayInVLC(file)
+                else:       
+                    self.vlc_window.error_dialog(
+                        "Unable To Play",
+                        f"Unfortunately, VLC Player is unable to play {input_str} at this time."
+                    )
+                    self.StopVLC()
             else:
                 self.vlc_window.title = f"{filename} - {VLC_PLAYER}"
-                self.vlc_window._impl.native.WindowState = WinForms.FormWindowState.Minimized
-                self.vlc_window.show()
+                if not self.vlc_window.visible:
+                    self.vlc_window._impl.native.WindowState = WinForms.FormWindowState.Minimized
+                    self.vlc_window.show()
                 self.vlc_window._impl.native.WindowState = WinForms.FormWindowState.Normal
                 self.player_panel._impl.native.Focus()
                 
@@ -1002,13 +1015,19 @@ class KMExplorer(toga.App):
             return '\\'.join(split_folder)+'\\'
         return folder_str
     
-    def SetFolderTableLocal(self, folder_str):
+    def SetFolderTableLocal(self, folder_str, from_folder_repo=False):
+        self.folder_type = FolderType.LOCAL_OR_NETWORK
+        
         self.google_folder_id = ''
         
-        folder_str = str(folder_str).replace('/', '\\')
-        folder_str += '\\' * (folder_str[-1] != '\\')
+        folder_str = str(folder_str).replace('/', '\\').rstrip('\\')
+        self.local_folder_path = folder_str
+        folder_str += '\\'
         local_files = os.listdir(folder_str)
         local_data = [['..', self.GetOneFolderUpLocal(folder_str)]] + [*map(lambda file: [file, folder_str + file], local_files)]
+        
+        if from_folder_repo:
+            local_data = [['...', FOLDER_REPO]] + local_data
         
         self.SetFolderTableFromData(local_data, self.OnDoubleClickLocalFile, ["Name", "Path"])
         
@@ -1043,16 +1062,26 @@ class KMExplorer(toga.App):
     def SetFolderTableFromGoogleDriveData(self, data, on_double_click):
         self.SetFolderTableFromData(data, on_double_click, ["Name", "ID"])
     
-    def GetGoogleDriveFolderID(self, folder_str):
-        return  folder_str.split('/')[-1].replace('?usp=share_link','')
+    def GetGoogleDriveFolderID(self, folder_url):
+        return  folder_url.split('/')[-1].replace('?usp=share_link','')
     
-    def SetFolderTableGoogleDrive(self, folder_str):
-        folder_id = self.GetGoogleDriveFolderID(folder_str)
+    def SetFolderTableGoogleDrive(self, folder_url="", folder_id="", from_folder_repo=False):
+        self.folder_type = FolderType.GOOGLE_DRIVE
+        
+        if not from_folder_repo:
+            folder_id = self.GetGoogleDriveFolderID(folder_url)
+            
+        if (not self.google_authenticated) or self.gauth.access_token_expired or self.gauth.credentials is None:
+            if not self.GoogleAuthenticate():
+                return
         
         file_list = self.drive.ListFile({'q': f"'{folder_id}' in parents and trashed=false"}).GetList()
         file_data = [*map(lambda file: [file['title'], file['id']], file_list)]
         
         self.google_folder_id = folder_id
+        
+        if from_folder_repo:
+            file_data = [['..', FOLDER_REPO]] + file_data
         
         self.SetFolderTableFromGoogleDriveData(file_data, self.OnDoubleClickGoogleDriveFile)
         
@@ -1098,43 +1127,43 @@ class KMExplorer(toga.App):
         else:
             return self.GoogleAuthenticate()
         
-    def GoogleAuthenticate(self,*args):
+    def GoogleAuthenticate(self):
         expired = False
         error = False
-        gauth = GoogleAuth()
+        self.gauth = GoogleAuth()
         
         try:
-            gauth.LoadCredentialsFile(CREDENTIALS_PATH)
+            self.gauth.LoadCredentialsFile(CREDENTIALS_PATH)
         except Exception as err:
             print(err)
 
-        if gauth.access_token_expired:
+        if self.gauth.access_token_expired:
             try:
-                gauth.Refresh()
+                self.gauth.Refresh()
             except Exception as err:
                 print(err)
                 expired = True
                 
-        if gauth.credentials is None or expired:
+        if self.gauth.credentials is None or expired:
             self.main_window.info_dialog(
                 title="Google Authentication",
                 message="Please sign in to your Google Account."
             )
             try:
-                gauth.LocalWebserverAuth()
+                self.gauth.LocalWebserverAuth()
             except Exception as err:
                 print(err)
                 error = True             
         else:
             try:
-                gauth.Authorize()
+                self.gauth.Authorize()
             except Exception as err:
                 print(err)
                 error = True 
         
         if not error:
             try:
-                gauth.SaveCredentialsFile(CREDENTIALS_PATH)
+                self.gauth.SaveCredentialsFile(CREDENTIALS_PATH)
             except Exception as err:
                 print(err)
                 error = True
@@ -1147,9 +1176,9 @@ class KMExplorer(toga.App):
             )
             return False
         
-        self.gauth_token = gauth.credentials.access_token
+        self.gauth_token = self.gauth.credentials.access_token
         
-        self.drive = GoogleDrive(gauth)
+        self.drive = GoogleDrive(self.gauth)
         self.google_authenticated = True
         
         return True
@@ -1187,7 +1216,7 @@ class KMExplorer(toga.App):
             ), 
             placeholder="Folder Name"
         )        
-        self.folder_name_input._impl.native.KeyPress += self.OnEnterPress
+        self.folder_name_input._impl.native.KeyDown += self.folder_name_input_KeyDown
 
         self.folder_save_button = toga.Button(
             label="Save",
@@ -1211,6 +1240,13 @@ class KMExplorer(toga.App):
         
         self.windows.add(self.text_entry_window)
         self.text_entry_window.content = text_entry_box
+    
+    def folder_name_input_KeyDown(self, sender, event):
+        if self.text_entry_window.visible:
+            print(f"DEBUG: Key Entered To TextBox: {event.KeyCode}")
+            if event.KeyCode == _ENTER:
+                self.folder_save_button.on_press(widget='')
+                event.Handled = True
     
     def folder_name_FormClosing(self, sender, event):
         print("DEBUG: Close Get Folder Name Window Clicked, Hiding Window Instead")
@@ -1258,7 +1294,8 @@ class KMExplorer(toga.App):
 
             else:
                 self.ImportFolderRepo(set_folder_table=False)
-            
+        
+        self.folder_name_input.value = self.GetFolderName()
         self.text_entry_window._impl.native.ShowDialog(self.main_window._impl.native)
     
     def SaveUpdatedFolderRepo(self):
@@ -1373,37 +1410,9 @@ class KMExplorer(toga.App):
         folder = kwargs["row"].location.replace('\n', '')
         
         if self.IsLocalFolder(folder) or self.IsNetworkFolder(folder):
-            self.SetFolderTableLocalFromFolderRepo(folder)
+            self.SetFolderTableLocal(folder, from_folder_repo=True)
         else:
-            self.SetFolderTableGoogleDriveFromFolderRepo(folder)
-        
-    def SetFolderTableGoogleDriveFromFolderRepo(self, folder_id):
-        self.folder_type = FolderType.GOOGLE_DRIVE
-        
-        if not self.google_authenticated:
-            if not self.GoogleAuthentication():
-                return
-        
-        file_list = self.drive.ListFile({'q': f"'{folder_id}' in parents and trashed=false"}).GetList()
-        file_data = [*map(lambda file: [file['title'], file['id']], file_list)]
-        
-        self.google_folder_id = folder_id
-        
-        file_data = [['..', FOLDER_REPO]] + file_data
-        
-        self.SetFolderTableFromGoogleDriveData(file_data, self.OnDoubleClickGoogleDriveFile)
-    
-    def SetFolderTableLocalFromFolderRepo(self, folder_path):
-        self.folder_type = FolderType.LOCAL_OR_NETWORK
-        
-        self.google_folder_id = ''
-
-        folder_path.replace('/', '\\')
-        folder_path += '\\' if folder_path[-1] != '\\' else ''
-        local_files = os.listdir(folder_path)
-        local_data = [['...', FOLDER_REPO]] + [['..', self.GetOneFolderUpLocal(folder_path)]] + [*map(lambda file: [file, folder_path + file], local_files)]
-        
-        self.SetFolderTableFromData(local_data, self.OnDoubleClickLocalFile, ["Name", "Path"])
+            self.SetFolderTableGoogleDrive(folder_id=folder, from_folder_repo=True)
         
         #endregion
         
@@ -1433,6 +1442,8 @@ class KMExplorer(toga.App):
     
     #region Download Google Drive
     
+        #region Progressbar Window
+    
     def InitDownloadProgressBarWindow(self, widget=''):
         self.download_progress_label = toga.Label(
             text="Downloading File",
@@ -1461,8 +1472,14 @@ class KMExplorer(toga.App):
         
         self.progress_window.hide()
     
+        #endregion
+    
+        #region Download Initialization
+    
     def DownloadGoogleDriveFolder(self, widget=''):
         if self.google_folder_id:
+            folder_name = self.GetFolderName()
+            
             download_folder = self.main_window.select_folder_dialog(
                 title="Select Download Folder",
                 multiselect=False
@@ -1470,11 +1487,7 @@ class KMExplorer(toga.App):
             
             if not download_folder:
                 download_folder = "%USERPROFILE%\\Downloads"
-            download_file = f"{download_folder}\\%s"
-            
-            folder = self.drive.CreateFile({'id': self.google_folder_id})
-            folder.FetchMetadata(fields='title')
-            folder_name = folder['title']
+            download_file = f"{download_folder}\\%s" 
             
             file_list = self.drive.ListFile({'q': f"'{self.google_folder_id}' in parents and trashed=false"}).GetList()
             num_files = len(file_list)
@@ -1558,6 +1571,10 @@ class KMExplorer(toga.App):
         
         self.app.add_background_task(CustomDownloadFile)
     
+        #endregion
+    
+        #region Asynchronous Downloads
+    
     async def DownloadPart(self, file, show_progress_bar, start_byte, end_byte):
         async with aiohttp.ClientSession(read_bufsize=MIN_CHUNK_SIZE) as client:
             data = await self.FetchFile(client, file, show_progress_bar, partitioned=True, start_byte=start_byte, end_byte=end_byte)
@@ -1609,18 +1626,7 @@ class KMExplorer(toga.App):
                     async for chunk, _ in resp.content.iter_chunks():
                         data += chunk
                         self.progress_bar.value += len(chunk)
-                    
-                    data_len = len(data)
-                    difference = data_len - (end_byte - start_byte)
-                    print(f"\nDownloaded {data_len}, Expected {end_byte - start_byte}; Difference = {difference}")
-                    
-                    if (difference > 0):
-                        print(f"Pesky extra data: {data[-difference:]}")
-                        data = data[:-difference]
-                        
-                        data_len = len(data)
-                        difference = data_len - (end_byte - start_byte)
-                        print(f"After fix: Downloaded {data_len}, Expected {end_byte - start_byte}; Difference = {difference}")
+                    data = await self.FixTrashData(data, start_byte, end_byte)
                     
                 else:
                     data = await resp.content.read()
@@ -1631,6 +1637,21 @@ class KMExplorer(toga.App):
                 print(f"ERROR: Ecountered an error while {download_string}\nResponse Status: {resp.status}\nResponse Content: {resp.content}")
                 return None
     
+    async def FixTrashData(self, data, start_byte, end_byte):
+        data_len = len(data)
+        difference = data_len - (end_byte - start_byte)
+        print(f"\nDownloaded {data_len}, Expected {end_byte - start_byte}; Difference = {difference}{f' ({data[-difference:]})' if difference else ''}")
+        
+        if (difference > 0):
+            data = data[:-difference]
+            data_len = len(data)
+            difference = data_len - (end_byte - start_byte)
+            print(f"After fix: Downloaded {data_len}, Expected {end_byte - start_byte}; Difference = {difference}")
+            
+        return data
+
+        #endregion
+        
     #endregion
     
     #region Full Screen Overrides
@@ -1745,6 +1766,7 @@ class KMExplorer(toga.App):
                 self.folder_table._impl.native.Columns[1].Width = 200
         
         self.main_box.add(self.folder_table)
+        self.main_window.title = f"{self.formal_name} - {self.GetFolderName()}"
         self.folder_table.focus()
         
     def SetFolderTable(self, folder_str):
@@ -1755,12 +1777,25 @@ class KMExplorer(toga.App):
             )
         
         if self.folder_type == FolderType.GOOGLE_DRIVE:
-            self.SetFolderTableGoogleDrive(folder_str)
+            self.SetFolderTableGoogleDrive(folder_url=folder_str)
         elif self.folder_type == FolderType.LOCAL_OR_NETWORK:
             self.SetFolderTableLocal(folder_str)
          
     #endregion
-            
+    
+    def GetFolderName(self):
+        if self.folder_type == FolderType.GOOGLE_DRIVE:
+            folder = self.drive.CreateFile({'id': self.google_folder_id})
+            folder.FetchMetadata(fields='title')
+            return folder['title']
+        if self.folder_type == FolderType.LOCAL_OR_NETWORK:
+            folder = self.local_folder_path
+            path_list = folder.split('\\')
+            return path_list[-1]
+        if self.folder_type == FolderType.FOLDER_REPO:
+            return 'Folder Repo'
+        return ''
+        
     def OnClickGetFolderContents(self, widget=''):
         folder_str = self.folder_input.value
         self.SetFolderType(folder_str)

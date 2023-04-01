@@ -1,7 +1,7 @@
 [tool.briefcase]
 project_name = "KM Explorer"
 bundle = "com.kylemueller.kmexplorer"
-version = "1.4.3"
+version = "1.5.0"
 url = "https://github.com/mueller14003/KM-Explorer"
 license = "BSD license"
 author = 'Kyle Mueller'
@@ -9,7 +9,7 @@ author_email = "kyle.mueller.ghs@gmail.com"
 
 [tool.briefcase.app.kmexplorer]
 formal_name = "KM Explorer"
-description = "Play media from local, network, and Google Drive folders"
+description = "Download and play media from local, network, and Google Drive folders"
 icon = "src/kmexplorer/resources/kmexplorer"
 sources = ['src/kmexplorer']
 requires = [
