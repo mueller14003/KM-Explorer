@@ -43,6 +43,8 @@ with open(f"{RESOURCES}\\API_KEY.txt", "r", encoding='utf-8') as f:
 
 MIN_CHUNK_SIZE = 2**18
 NUM_DL_PARTS = 12
+INT32_MAX = 2147483647
+ADJUSTED_PROGRESS_DIVIDER = 10
 
 FOLDER_REPO = "Folder Repo"
 VLC_PLAYER =  "VLC Player"
@@ -404,6 +406,7 @@ class KMExplorer(toga.App):
         self.player.set_hwnd(str(player_hwnd))
         self.player.video_set_mouse_input(False)
         self.player.video_set_key_input(False)
+        self.player.event_manager().event_attach(vlc.EventType.MediaPlayerEndReached, self.player_media_end_reached)
 
         self.vlc_box = toga.Box(
             style=Pack(
@@ -706,6 +709,10 @@ class KMExplorer(toga.App):
         self.ToggleFullscreenVLC()
         event.Handled = True
         
+    def player_media_end_reached(self, event):
+        loop = self._impl.loop
+        loop.run_in_executor(None, lambda: self.StopVLC(hide=False))
+    
         #endregion
             
         #region VLC Player Functions
@@ -824,12 +831,12 @@ class KMExplorer(toga.App):
             #region Playback Controls
     
     def StopVLC(self, widget='', hide=True):
-        print("DEBUG: Stopping VLC Playback, Exiting Fullscreen, And Hiding Window")
+        print(f"DEBUG: Stopping VLC Playback, Exiting Fullscreen{', And Hiding Window'*hide}")
         self.player.stop()
         self.vlc_window.title = VLC_PLAYER
-        self.exit_full_screen()
-        self.RefreshControlMenu()
         if hide:
+            self.exit_full_screen()
+            self.RefreshControlMenu()
             self.vlc_window.hide()
     
     def PlayPauseVLC(self, widget=''):
@@ -1496,7 +1503,16 @@ class KMExplorer(toga.App):
             
             folder_size = sum(map(lambda f: int(f['fileSize']), file_list))
             self.download_progress_label.text = f"Downloading all files in \"{folder_name}\" ({round(folder_size / 2**20, 2):0.1f} MB)"
-            self.progress_bar.max = folder_size + ((parts_per_file - 1) * num_files)
+            
+            adjusted_folder_size = (folder_size + ((parts_per_file - 1) * num_files)) // ADJUSTED_PROGRESS_DIVIDER
+            print(f"Adjusted Folder Size for {folder_name}: {adjusted_folder_size}")
+            if adjusted_folder_size > (INT32_MAX * ADJUSTED_PROGRESS_DIVIDER):
+                return self.main_window.error_dialog(
+                    title="Folder Contents Exceed Max Download Size",
+                    message=f"The contents of {folder_name} exceed the maximum allowed download size for this application ({round((INT32_MAX * ADJUSTED_PROGRESS_DIVIDER) / 2**20, 2):0.1f} MB).\n\nPlease download the files individually."
+                )
+            
+            self.progress_bar.max = adjusted_folder_size
             self.progress_bar.value = 0
             
             print(f"\nDownloading folder \"{folder_name}\"\nFolder size: {folder_size}\n")
@@ -1541,7 +1557,7 @@ class KMExplorer(toga.App):
         file = File(_file.id, _file.name, gdrive_file.metadata['fileSize'])
         
         self.download_progress_label.text = f"Downloading \"{file.name}\" ({file.GetSizeMB():0.1f} MB)"
-        self.progress_bar.max = file.size + NUM_DL_PARTS - 1
+        self.progress_bar.max = (file.size + NUM_DL_PARTS - 1) // ADJUSTED_PROGRESS_DIVIDER
         self.progress_bar.value = 0
         
         print(f"\nDownloading file \"{download_path}\"\nFile size: {file.size}\n")
@@ -1625,7 +1641,7 @@ class KMExplorer(toga.App):
                 if show_progress_bar and file.chunk_size >= MIN_CHUNK_SIZE:
                     async for chunk, _ in resp.content.iter_chunks():
                         data += chunk
-                        self.progress_bar.value += len(chunk)
+                        self.progress_bar.value += len(chunk) // ADJUSTED_PROGRESS_DIVIDER
                     data = await self.FixTrashData(data, start_byte, end_byte)
                     
                 else:
